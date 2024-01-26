@@ -23,30 +23,31 @@ def get_all_log():
     time_threshold = timedelta(days=29)
     fz = open('het_han_hoac_huy_goi_C120_t11.txt', encoding='utf-8', mode='w+')
     ft = open('chuyen_goi_t11.txt', encoding='utf-8', mode='w+')
-    for f_name in files:
-        count_het_han = 0
-        count_dang_ky_moi = 0
-        print(f_name)
-        for line in open(f_name, encoding='utf-8', mode='r'):
+    for f_name in files_t11:
+        count_het_han_hoac_huy_goi_C120 = 0
+        count_chuyen_goi = 0
+        print('vasp/'+f_name)
+        for line in open('vasp/'+f_name, encoding='utf-8', mode='r'):
             if 'DELELE' in line:                #Nếu log type là DELETE (DELELE)
                 line_split = line.split(',')
                 service_name = line_split[5]
-                if service_name in ds_goi_cuoc:     #Và thuộc các loại gói cước trên thì ghi vào file hết hạn
+                if service_name in ds_goi_cuoc:     #Và thuộc C120 thì ghi vào file hết hạn thang 11
                     fz.write(line)
-                    count_het_han += 1  
-            elif 'REGISTER' in line:            #Nếu log type là REGISTER thì đó là chuyển gói
+                    count_het_han_hoac_huy_goi_C120 += 1  
+            elif 'REGISTER' in line:            #Nếu log type là REGISTER
                 line_split = line.split(',')
                 service_name = line_split[5]
+                price = line_split[6]
                 str_regis_datetime = line_split[7]
                 str_expire_datetime = line_split[8]
-                int_price = int(line_split[6])
-                if convert_str_to_date(str_expire_datetime) - convert_str_to_date(str_regis_datetime) > time_threshold  \
+                int_price = int(price) if price.isdigit() else 0
+                if convert_str_to_date(str_expire_datetime) - convert_str_to_date(str_regis_datetime) > time_threshold\
                     and int_price > 0\
-                        and service_name not in ds_goi_cuoc:
+                        and service_name not in ds_goi_cuoc:            #và là gói cước từ 30 ngày trở lên, không phải gói 0 đồng và không phải C120, thì ghi vào file chuyển gói
                     ft.write(line)
-                    count_gia_han += 1
-        print(count_gia_han)
-        print(count_dang_ky_moi)
+                    count_chuyen_goi += 1
+        print(count_het_han_hoac_huy_goi_C120)
+        print(count_chuyen_goi)
     fz.close()
     ft.close()
 
@@ -58,11 +59,11 @@ def convert_log():
         for line in open(f_name, encoding='utf-8', mode='r'):
             line_split = line.strip().split(',')
             type_log = line_split[0]
-            isdn = line_split[2]
+            isdn = line_split[  2]
             service_code = line_split[3]
             group_code = line_split[4]
-            service_name = line_split[5]
-            service_price = int(line_split[6])
+            service_name = line_split[5]            #đây là tên gói cước (C120 for example)
+            service_price = int(line_split[6]) if line_split[6].isdigit() else 0
             str_regis_datetime = line_split[7]
             str_expire_datetime = line_split[8]
             str_end_datetime = line_split[9] if line_split[9] != '""' else None
@@ -99,11 +100,11 @@ def mapping_data():
     fz.close()
     
 def export_data_log():
-    fz = open('chuyen_tu_goi_C120_sang_goi_khac_t11.json', encoding='utf-8', mode='w+')
+    fl = open('chuyen_tu_goi_C120_sang_goi_khac_t11.json', encoding='utf-8', mode='w+')
     for line in open('full.json', encoding='utf-8', mode='r'):
         a = json.loads(line)
         isdn = str(a['isdn'])
-        service_name_x = a['service_name_het_han']
+        service_name_het_han = a['service_name_het_han']
         expired_service = a['service_name_het_han']
         expired_service_price = a['service_price_het_han']
         expired_service_regis_date = a['regis_datetime_het_han']
@@ -113,7 +114,7 @@ def export_data_log():
         regis_service_price = a['service_price_chuyen_goi']
         expired_service_end_date = a['end_datetime_het_han']
         regis_service_regis_date = a['regis_datetime_chuyen_goi']
-        service_name_y = a['service_name_chuyen_goi']
+        service_name_chuyen_goi = a['service_name_chuyen_goi']
         data_dict = {'isdn': isdn, 'expired_service': expired_service, 'expired_service_price': expired_service_price,
                      'expired_service_regis_date': expired_service_regis_date,
                      'expired_service_expired_date': expired_service_expired_date,
@@ -121,20 +122,18 @@ def export_data_log():
                      'regis_service': regis_service, 'regis_service_price': regis_service_price,
                      'regis_service_regis_date': regis_service_regis_date,
                      'regis_service_expired_date': regis_service_expired_date}
-        if service_name_x:
-            if service_name_y:
-                if convert_pandas_date(regis_service_regis_date) > convert_pandas_date(expired_service_end_date):
-                    data_dict['log_type'] = 'chuyen_goi'
-                    fz.write(json.dumps(data_dict, ensure_ascii=False))
-                    fz.write('\n')
-    fz.close()
+        if service_name_het_han and service_name_chuyen_goi\
+            and convert_pandas_date(regis_service_regis_date) > convert_pandas_date(expired_service_end_date):
+                fl.write(json.dumps(data_dict, ensure_ascii=False))
+                fl.write('\n')
+    fl.close()
     
 def sort_by_time():
     my_list = []
     for line in open('chuyen_tu_goi_C120_sang_goi_khac_t11.json', encoding='utf-8', mode='r'):
         a = json.loads(line)
         my_list.append(a)
-    mylist = sorted(my_list, key=itemgetter('isdn', 'regis_service', 'regis_service_regis_date'))
+    mylist = sorted(my_list, key=itemgetter('isdn', 'regis_service', 'regis_service_regis_date'))     #Sort value theo isdn, loại gói cước mới và ngày đăng ký gói cước mới theo ascending
     fz = open('chuyen_tu_goi_C120_sang_goi_khac_t11_sorted.json', encoding='utf-8', mode='w+')
     for i in mylist:
         fz.write(json.dumps(i, ensure_ascii=False))
